@@ -1,18 +1,47 @@
 name: Generate LinkedIn Posts
 
 on:
-  workflow_dispatch:
-    inputs:
-      brief:
-        description: 'Brief en JSON'
-        required: true
+  repository_dispatch:
+    types: [generate-posts]
 
 jobs:
   generate:
     runs-on: ubuntu-latest
     steps:
-      - name: Generate posts via Claude
+      - name: Call Claude API and save to Firebase
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          echo "Generando posts..."
+          node -e "
+          const https = require('https');
+
+          const payload = JSON.parse(process.env.BRIEF || '{}');
+          const prompt = payload.prompt || '';
+
+          const data = JSON.stringify({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 4000,
+            messages: [{ role: 'user', content: prompt }]
+          });
+
+          const options = {
+            hostname: 'api.anthropic.com',
+            path: '/v1/messages',
+            method: 'POST',
+            headers: {
+              'x-api-key': process.env.ANTHROPIC_API_KEY,
+              'anthropic-version': '2023-06-01',
+              'content-type': 'application/json',
+              'content-length': data.length
+            }
+          };
+
+          const req = https.request(options, (res) => {
+            let body = '';
+            res.on('data', (chunk) => body += chunk);
+            res.on('end', () => console.log(body));
+          });
+
+          req.write(data);
+          req.end();
+          "
